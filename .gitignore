@@ -1,5 +1,6 @@
 # User rosters and local customization are private, including when force-added.
 /assets/names.txt
+/assets/roster.txt
 /assets/*.local.*
 /.private/
 /input/

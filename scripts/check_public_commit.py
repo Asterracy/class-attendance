@@ -14,7 +14,7 @@ def main():
     errors = []
     for name in filter(None, paths):
         path = PurePosixPath(name)
-        if path.name == 'names.txt' or path.suffix.lower() in forbidden_ext or forbidden_dir.intersection(path.parts) or path.name.startswith('.env') or path.name == 'local.properties':
+        if (path.name in {'names.txt', 'roster.txt'} or '.local.' in path.name) or path.suffix.lower() in forbidden_ext or forbidden_dir.intersection(path.parts) or path.name.startswith('.env') or path.name == 'local.properties':
             errors.append(name + ': private data or build artifact path')
             continue
         mode = git('ls-files', '-s', '--', name).split(b' ', 1)[0]

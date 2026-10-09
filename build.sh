@@ -12,20 +12,34 @@ if [[ -z "$attendance_tools" || ! -f "$attendance_android_jar" || ! -f "$attenda
     exit 1
 fi
 
-# Only the locally provided names file is staged; no example or other asset is embedded.
+# Stage only private, validated roster assets; examples are never embedded.
 mkdir -p build/generated build/classes build/dex build/assets dist
+if [[ -f assets/roster.local.txt ]]; then
+    python3 scripts/validate_roster.py assets/roster.local.txt
+    cp assets/roster.local.txt build/assets/roster.txt
+else
+    : > build/assets/roster.txt
+fi
+if [[ "${ATTENDANCE_REQUIRE_COMPLETE_ROSTER:-0}" == 1 && ! -s build/assets/roster.txt ]]; then
+    echo 'A complete private student-ID roster is required for this delivery.' >&2
+    exit 1
+fi
 if [[ -f assets/names.txt ]]; then
     python3 scripts/validate_names.py assets/names.txt
     cp assets/names.txt build/assets/names.txt
 else
     : > build/assets/names.txt
-    echo 'Building with an empty default roster.'
+    echo 'Building with an empty legacy roster.'
 fi
 "$attendance_tools/aapt2" compile --dir res -o build/resources.zip
 "$attendance_tools/aapt2" link -o build/base.apk --manifest AndroidManifest.xml -I "$attendance_android_jar" --java build/generated -A build/assets build/resources.zip
 find src build/generated -name '*.java' > build/sources.txt
 "${attendance_java_bin}javac" --release 8 -encoding UTF-8 -classpath "$attendance_android_jar" -d build/classes @build/sources.txt
 "${attendance_java_bin}jar" cf build/classes.jar -C build/classes .
+if [[ "${ATTENDANCE_COMPILE_ONLY:-0}" == 1 ]]; then
+    echo 'Compilation verified. No installable or final APK generated.'
+    exit 0
+fi
 "${attendance_java_bin}java" -cp "$attendance_tools/lib/d8.jar" com.android.tools.r8.D8 --release --min-api 23 --lib "$attendance_android_jar" --output build/dex build/classes.jar
 cp build/base.apk build/unsigned.apk
 (cd build/dex && zip -q ../unsigned.apk classes.dex)

@@ -1,0 +1,5 @@
+CREATE TABLE roster (position INTEGER PRIMARY KEY, name TEXT NOT NULL);
+CREATE TABLE draft (id INTEGER PRIMARY KEY CHECK(id=1), started INTEGER NOT NULL);
+CREATE TABLE draft_entries (position INTEGER PRIMARY KEY, name TEXT NOT NULL, arrived INTEGER NOT NULL CHECK(arrived IN(0,1)));
+CREATE TABLE records (id TEXT PRIMARY KEY, started INTEGER NOT NULL, saved INTEGER NOT NULL);
+CREATE TABLE record_entries (record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE, position INTEGER NOT NULL, name TEXT NOT NULL, arrived INTEGER NOT NULL CHECK(arrived IN(0,1)), PRIMARY KEY(record_id,position));

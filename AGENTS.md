@@ -2,11 +2,11 @@
 
 Read the roster workflow in README.md before customizing an APK.
 
-- The public default roster is empty. Keep real names only in the ignored local `assets/names.txt`, or in a separate private checkout.
-- Use only user-authorized sources. Extract names only, verify uncertain characters and the intended class boundary with the user, and preserve valid same-name entries. Do not infer attendance.
+- The public default roster is empty. Keep real names and student IDs only in the ignored local `assets/roster.local.txt` and legacy `assets/names.txt`, or in a separate private checkout.
+- Use only user-authorized sources. Extract authorized names and student IDs only; keep IDs as text, never infer missing or sequential IDs. Actually inspect supplied images, verify uncertain characters and class boundaries with the user, and preserve valid same-name entries. Do not infer attendance.
 - Never upload user rosters, roster screenshots, customized APKs, attendance exports, databases, signing keys, credentials, or private machine paths to this repository or a public release.
-- Do not put real names into source, tests, documentation, commit messages, issue bodies, screenshots, or logs. Synthetic fixtures must be clearly fictional.
-- Run `python3 scripts/validate_names.py assets/names.txt` when a local roster exists. Avoid printing the names. Build and verify the embedded asset locally; share a personalized APK only with its user.
-- Install the provided local hooks using `git config core.hooksPath .githooks`. Review `git diff --cached` and run the staged snapshot check before committing or pushing. Hooks and ignore rules are guardrails, not proof that arbitrary prose contains no personal data.
-- Preserve the existing SQLite database and signing key when maintaining an installed private app. Do not wipe data to apply a roster change. First-install assets seed new databases only; use in-app editing for an already initialized installation.
-- Keep downloaded SDK tools and generated/test outputs outside committed source. Never bundle Android SDK components under this project's license.
+- Do not put real names or IDs into source, tests, documentation, commit messages, issue bodies, screenshots, or logs. Synthetic fixtures must be clearly fictional. Public examples are not embedded by the build.
+- Validate a complete private roster with `python3 scripts/validate_roster.py assets/roster.local.txt`; validate legacy names with `python3 scripts/validate_names.py assets/names.txt` when present. Avoid printing identities. Set `ATTENDANCE_REQUIRE_COMPLETE_ROSTER=1` for complete private deliveries, compare actual APK assets with the authorized roster, and share personalized APKs only with their user.
+- Install the provided local hooks using `git config core.hooksPath .githooks`. Review `git diff --cached`, check every proposed commit and its reachable history, and run the staged snapshot check before committing or pushing. Hooks and ignore rules are guardrails, not proof that arbitrary prose contains no personal data.
+- Preserve the existing SQLite database and original signing key when maintaining an installed private app. Keep the package name and increment versionCode. Never wipe data or require uninstalling to apply a roster change. A changed complete roster asset updates the current roster once; active drafts and saved snapshots remain intact. Legacy name-only assets seed new databases only. Never rewrite old records with new IDs or activity names.
+- Keep downloaded SDK tools and generated/test outputs outside committed source. Verify public builds in a clean snapshot with no private assets, and keep already-delivered private APKs unchanged. Never bundle Android SDK components under this project's license.

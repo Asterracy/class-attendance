@@ -55,53 +55,69 @@ public final class MainActivity extends Activity {
         if(screen.equals("history")){history();return;}if(screen.equals("detail")&&currentRecord!=null){detail(currentRecord);return;}
         AttendanceStore.Record draft=store.draft();base(draft==null?"班级考勤":"正在考勤");
         if(draft==null) {
-            List<String> names=store.roster();LinearLayout list=scrolling();
+            List<AttendanceStore.Entry> names=store.roster();LinearLayout list=scrolling();
             if(names.isEmpty()) {TextView empty=text("尚未导入姓名\n点击右上角 ⋮ → 编辑名单",17,MUTED);empty.setPadding(0,dp(40),0,dp(40));list.addView(empty);}
-            for(String name:names) {TextView row=text(name,19,INK);row.setMinHeight(dp(54));list.addView(row);divider(list);}
-            actionButton(button("开始考勤",true,()->{
+            for(AttendanceStore.Entry person:names) {TextView row=text(person.label(),18,INK);row.setMinHeight(dp(54));list.addView(row);divider(list);}
+            actionButton(button("开始新考勤",true,()->{
                 if(store.roster().isEmpty()){editRoster();return;}
-                safe(()->{store.startDraft();render();});
+                startDraftDialog();
             }));
         }else {
             summary=text("",15,GREEN);summary.setPadding(0,dp(4),0,dp(12));body.addView(summary);updateSummary();
             LinearLayout list=scrolling();
             for(AttendanceStore.Entry e:draft.entries) {
-                CheckBox box=new CheckBox(this);box.setText(e.name);box.setTextSize(19);box.setTextColor(INK);box.setButtonTintList(ColorStateList.valueOf(GREEN));box.setMinHeight(dp(56));box.setPadding(dp(4),0,dp(8),0);box.setChecked(e.arrived);box.setContentDescription(e.name+"，"+(e.arrived?"已到":"未到"));
-                box.setOnCheckedChangeListener((v,checked)->{try {store.check(e.position,checked);box.setContentDescription(e.name+"，"+(checked?"已到":"未到"));updateSummary();}catch(Exception ex){box.setOnCheckedChangeListener(null);box.setChecked(!checked);error(ex);render();}});list.addView(box);divider(list);
+                LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.VERTICAL);row.setPadding(0,dp(8),0,dp(8));
+                TextView name=text(e.label(),18,INK);name.setMinHeight(dp(36));row.addView(name);
+                RadioGroup options=new RadioGroup(this);options.setOrientation(LinearLayout.HORIZONTAL);
+                for(int status:new int[]{AttendanceRules.PRESENT,AttendanceRules.ABSENT,AttendanceRules.LEAVE}) {
+                    RadioButton option=new RadioButton(this);option.setId(View.generateViewId());option.setTag(status);option.setText(AttendanceRules.statusLabel(status));option.setTextSize(16);option.setTextColor(INK);option.setButtonTintList(ColorStateList.valueOf(GREEN));option.setMinHeight(dp(48));option.setContentDescription(e.label()+"，"+AttendanceRules.statusLabel(status));
+                    options.addView(option,new RadioGroup.LayoutParams(0,dp(48),1));if(e.status==status)options.check(option.getId());
+                }
+                options.setOnCheckedChangeListener((group,checkedId)->{RadioButton option=group.findViewById(checkedId);if(option==null)return;try{store.check(e.position,(Integer)option.getTag());updateSummary();}catch(Exception ex){error(ex);render();}});
+                row.addView(options);list.addView(row);divider(list);
             }
             actionButton(button("保存本次考勤",true,()->saveDraft()));
-            actionButton(button("取消本次",false,()->confirm("取消本次考勤？","当前勾选草稿将被清空，已保存记录不受影响。","确认取消",()->{store.discard();render();})));
+            actionButton(button("取消本次",false,()->confirm("取消本次考勤？","当前考勤草稿将被清空，已保存记录不受影响。","确认取消",()->{store.discard();render();})));
         }
     }
-    private void updateSummary(){AttendanceStore.Record r=store.draft();if(r!=null&&summary!=null)summary.setText("共 "+r.entries.size()+" 人   ·   已到 "+r.arrived()+"   ·   未到 "+(r.entries.size()-r.arrived()));}
+    private void startDraftDialog() {
+        EditText input=new EditText(this);input.setSingleLine(true);input.setTextSize(18);input.setHint("例如：班会、课程名称");input.setPadding(dp(20),dp(12),dp(20),dp(12));
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("开始新考勤").setMessage("请填写本次活动名称").setView(input).setNegativeButton("取消",null).setPositiveButton("开始",null).create();
+        dialog.setOnShowListener(d->{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            String activity;try{activity=AttendanceRules.activityName(input.getText().toString());}catch(IllegalArgumentException ex){input.setError(ex.getMessage());return;}
+            try{store.startDraft(activity);dialog.dismiss();render();}catch(Exception ex){error(ex);}
+        });input.requestFocus();dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);});dialog.show();
+    }
+    private String counts(AttendanceStore.Record r){return "共 "+r.entries.size()+" 人 · 已到 "+r.arrived()+" · 未到 "+r.absent()+" · 请假 "+r.leave();}
+    private void updateSummary(){AttendanceStore.Record r=store.draft();if(r!=null&&summary!=null)summary.setText(r.activityLabel()+"\n"+counts(r));}
     private void saveDraft() {
         AttendanceStore.Record r=store.draft();if(r==null)return;
-        confirm("保存考勤","已到 "+r.arrived()+" 人，未到 "+(r.entries.size()-r.arrived())+" 人。\n保存为独立记录，不覆盖历史。","确认保存",()->{
+        confirm("保存考勤",r.activityLabel()+"\n"+counts(r)+"\n保存为独立记录，不覆盖历史。","确认保存",()->{
             currentRecord=store.save();screen="detail";render();toast("已保存到本机");
         });
     }
     private void menu(View anchor) {
         PopupMenu p=new PopupMenu(this,anchor);p.getMenu().add("查看记录");p.getMenu().add("编辑名单");p.getMenu().add("使用说明");
-        p.setOnMenuItemClickListener(item->{switch(item.getTitle().toString()){case "查看记录":screen="history";render();break;case "编辑名单":editRoster();break;default:new AlertDialog.Builder(this).setTitle("班级考勤 1.0.0").setMessage("仅在本机存储，无账号、无网络权限。\n\n开始考勤后，只勾选实际到场的人。未勾选显示“未到”，不表示处分结论。勾选草稿自动保留，退出后可继续。\n\n保存记录后可导出真正 Excel (.xlsx)。在文件选择器选择位置；可从历史重新导出。修改名单不影响已有记录。\n\n卸载应用或系统清除应用数据会删除本机记录，请先导出需要保留的记录。").setPositiveButton("知道了",null).show();}return true;});p.show();
+        p.setOnMenuItemClickListener(item->{switch(item.getTitle().toString()){case "查看记录":screen="history";render();break;case "编辑名单":editRoster();break;default:new AlertDialog.Builder(this).setTitle("班级考勤 1.1.0").setMessage("仅在本机存储，无账号、无网络权限。\n\n填写活动名称后开始考勤，每人可选择已到、未到或请假，三种状态互斥。草稿自动保留，退出后可继续。旧记录未提供的活动名称与学号会明确标注，不会补造。\n\n保存记录后可导出真正 Excel (.xlsx)。在文件选择器选择位置；可从历史重新导出。修改名单不影响已有记录。\n\n卸载应用或系统清除应用数据会删除本机记录，请先导出需要保留的记录。").setPositiveButton("知道了",null).show();}return true;});p.show();
     }
     private void history() {
         base("考勤记录");List<AttendanceStore.Record> records=store.records();LinearLayout list=scrolling();
         if(records.isEmpty()){TextView t=text("还没有保存的记录",17,MUTED);t.setPadding(0,dp(32),0,0);list.addView(t);}
-        for(AttendanceStore.Record r:records) {TextView row=text(XlsxExporter.date(r.saved)+"\n已到 "+r.arrived()+" / "+r.entries.size()+" 人",16,INK);row.setPadding(dp(12),dp(16),dp(12),dp(16));row.setBackground(round(Color.WHITE,0xffe5ece8));row.setOnClickListener(v->{currentRecord=r.id;screen="detail";render();});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(10);list.addView(row,lp);}
-        if(!records.isEmpty())actionButton(button("清空全部历史",false,()->confirm("永久清空全部历史？","将删除 "+records.size()+" 条已保存考勤，无法撤销。请确认需要的记录已导出。\n当前名单和勾选草稿会保留。","确认清空历史",()->{store.clearRecords();history();})));
+        for(AttendanceStore.Record r:records) {TextView row=text(r.activityLabel()+"\n"+XlsxExporter.date(r.saved)+"\n"+counts(r),16,INK);row.setPadding(dp(12),dp(16),dp(12),dp(16));row.setBackground(round(Color.WHITE,0xffe5ece8));row.setOnClickListener(v->{currentRecord=r.id;screen="detail";render();});LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(10);list.addView(row,lp);}
+        if(!records.isEmpty())actionButton(button("清空全部历史",false,()->confirm("永久清空全部历史？","将删除 "+records.size()+" 条已保存考勤，无法撤销。请确认需要的记录已导出。\n当前名单和考勤草稿会保留。","确认清空历史",()->{store.clearRecords();history();})));
     }
     private void detail(String id) {
         AttendanceStore.Record r=store.record(id);if(r==null){screen="history";history();return;}base("考勤详情");
-        TextView meta=text("保存于 "+XlsxExporter.date(r.saved)+"\n共 "+r.entries.size()+" 人 · 已到 "+r.arrived()+" · 未到 "+(r.entries.size()-r.arrived()),14,MUTED);meta.setPadding(0,dp(4),0,dp(16));body.addView(meta);
-        LinearLayout list=scrolling();for(AttendanceStore.Entry e:r.entries){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);TextView name=text(e.name,19,INK);row.addView(name,new LinearLayout.LayoutParams(0,dp(54),1));TextView status=text(e.arrived?"已到":"未到",16,e.arrived?GREEN:MUTED);row.addView(status);list.addView(row);divider(list);}
+        TextView meta=text(r.activityLabel()+"\n保存于 "+XlsxExporter.date(r.saved)+"\n"+counts(r),14,MUTED);meta.setPadding(0,dp(4),0,dp(16));body.addView(meta);
+        LinearLayout list=scrolling();for(AttendanceStore.Entry e:r.entries){LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);TextView name=text(e.label(),18,INK);row.addView(name,new LinearLayout.LayoutParams(0,dp(54),1));TextView status=text(AttendanceRules.statusLabel(e.status),16,e.status==AttendanceRules.PRESENT?GREEN:MUTED);row.addView(status);list.addView(row);divider(list);}
         actionButton(button("导出 Excel (.xlsx)",true,()->export(id)));
         actionButton(button("删除这条记录",false,()->confirm("永久删除这条记录？",XlsxExporter.date(r.saved)+"\n已到 "+r.arrived()+" / "+r.entries.size()+" 人。\n删除后无法撤销，请先导出需要保留的记录。","确认删除",()->{store.delete(id);screen="history";render();})));
     }
     private void editRoster() {
         if(store.draft()!=null){new AlertDialog.Builder(this).setTitle("有正在进行的考勤").setMessage("请先保存或取消本次考勤，再编辑名单。退出后草稿仍会保留。").setPositiveButton("返回考勤",(d,w)->home()).show();return;}
-        EditText input=new EditText(this);input.setTextSize(17);input.setGravity(Gravity.TOP);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);input.setMinLines(8);input.setMaxLines(14);input.setPadding(dp(16),dp(8),dp(16),dp(8));input.setHint("每行一个姓名，可直接粘贴");input.setText(android.text.TextUtils.join("\n",store.roster()));
+        EditText input=new EditText(this);input.setTextSize(17);input.setGravity(Gravity.TOP);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE|android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);input.setMinLines(8);input.setMaxLines(14);input.setPadding(dp(16),dp(8),dp(16),dp(8));input.setHint("每行一个姓名，可直接粘贴");List<String> namesOnly=new ArrayList<>();for(AttendanceStore.Entry e:store.roster())namesOnly.add(e.name);input.setText(android.text.TextUtils.join("\n",namesOnly));
         ScrollView scroll=new ScrollView(this);scroll.addView(input);
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("编辑名单").setMessage("每行一个姓名；也支持逗号或分号分隔。仅录入姓名。修改不会改变历史记录。").setView(scroll).setNegativeButton("取消",null).setPositiveButton("核对并保存",null).create();
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("编辑名单").setMessage("每行一个姓名；也支持逗号或分号分隔。仅编辑姓名，可安全匹配的学号会保留。新增或无法确定的学号留空。修改不会改变历史记录。").setView(scroll).setNegativeButton("取消",null).setPositiveButton("核对并保存",null).create();
         dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             String value=input.getText().toString().trim();List<String> names=new ArrayList<>();Set<String> seen=new HashSet<>();boolean duplicate=false;
             if(!value.isEmpty())for(String token:value.split("[\\r\\n,，;；\\t]+")){String name=token.trim();if(name.isEmpty())continue;if(name.codePointCount(0,name.length())>40){input.setError("单个姓名过长，请检查分隔");return;}for(int i=0;i<name.length();i++)if(Character.isISOControl(name.charAt(i))){input.setError("姓名中含无效控制字符");return;}names.add(name);if(!seen.add(name))duplicate=true;}
@@ -126,5 +142,5 @@ public final class MainActivity extends Activity {
     private void error(Exception ex){new AlertDialog.Builder(this).setTitle("操作未完成").setMessage("数据写入或文件操作失败，请检查可用空间后重试。\n"+(ex.getMessage()==null?ex.getClass().getSimpleName():ex.getMessage())).setPositiveButton("知道了",null).show();}
     private void fatal(Exception ex){new AlertDialog.Builder(this).setTitle("无法打开本机记录").setMessage("为保护现有数据，应用未重置数据库。\n"+ex.getMessage()).setPositiveButton("关闭",(d,w)->finish()).setCancelable(false).show();}
     private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
-    @Override public void onBackPressed(){if(!screen.equals("home")){home();return;}if(store.draft()!=null){new AlertDialog.Builder(this).setTitle("退出并保留草稿？").setMessage("当前勾选已保存在本机，下次打开可继续。还未生成正式考勤记录。").setNegativeButton("继续考勤",null).setPositiveButton("保留草稿并退出",(d,w)->finish()).show();}else super.onBackPressed();}
+    @Override public void onBackPressed(){if(!screen.equals("home")){home();return;}if(store.draft()!=null){new AlertDialog.Builder(this).setTitle("退出并保留草稿？").setMessage("当前考勤已保存在本机，下次打开可继续。还未生成正式考勤记录。").setNegativeButton("继续考勤",null).setPositiveButton("保留草稿并退出",(d,w)->finish()).show();}else super.onBackPressed();}
 }

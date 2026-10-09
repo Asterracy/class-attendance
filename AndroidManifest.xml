@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="cn.local.attendance" android:versionCode="1" android:versionName="1.0.0">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="cn.local.attendance" android:versionCode="2" android:versionName="1.1.0">
   <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="35" />
   <application android:label="班级考勤" android:theme="@style/AppTheme" android:icon="@drawable/icon" android:allowBackup="false" android:supportsRtl="true">
     <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait" android:resizeableActivity="false" android:enableOnBackInvokedCallback="false" android:windowSoftInputMode="adjustResize">
